@@ -199,6 +199,7 @@ std::ostream& operator<<(std::ostream&out,const u128&x){
 }
 
 using std::cout;
+using std::cerr;
 
 class UMultiInt{
 private:
@@ -216,13 +217,13 @@ protected:
 	Group Auto(u32 R)const{Group res;res.L=((Log1(100000000u,R)-1)>>1)<<1,res.B=Pow(res.L),res.F=Pow(res.L>>1);return res;}
 	void trim(){while(len>1&&!num[len-1]) len--;}
 	bool is_Pow(u32 x){return !(x&(x-1));}
-	UMultiInt bit_helper(const UMultiInt&a,const UMultiInt&b,const std::function<bool(bool,bool)>&op)const{
-		std::string _a=a.To_base(2),_b=b.To_base(2),_res;
-		u32 n=_a.size(),m=_b.size(),lim=std::max(n,m);_res.resize(lim);
-		std::cerr<<_a<<' '<<_b<<'\n';
-		for(u32 i=0;i<lim;i++){_res[lim-i-1]='0'+op((i<n?_a[i]-'0':0),(i<m?_b[i]-'0':0));}
-		std::cerr<<'\n'<<_res<<'\n';
-		return UMultiInt(2,_res).To_base(a.RADIX);
+	UMultiInt bit_helper(const UMultiInt&a,const UMultiInt&b,const std::function<u32(u32,u32)>&op)const{
+		auto _a=a.To_base(2),_b=b.To_base(2);
+		u32 n=_a.len,m=_b.len,lim=std::max(n,m);
+		UMultiInt _res(2);_res.Expand(lim);
+		for(u32 i=0;i<lim;i++) _res.num[i]=op((i<n?_a.num[i]:0),(i<m?_b.num[i]:0));
+		_res.trim();
+		return _res.To_base(a.RADIX);
 	}
 	void Expand(u32 _len){
 		if(Max>=_len){len=_len;return;}
@@ -684,6 +685,17 @@ public:
 		if(UMultiInt(RADIX,r).pow(e)==*this) return e;
 		else return e+1;
 	}
+	//--bit--
+	UMultiInt operator<<(u32 p)const{UMultiInt res(*this);res<<=p;return res;}
+	UMultiInt& operator<<=(u32 p){*this*=UMultiInt(RADIX,2u).pow(p);return *this;}
+	UMultiInt operator>>(u32 p)const{UMultiInt res(*this);res>>=p;return res;}
+	UMultiInt& operator>>=(u32 p){*this/=UMultiInt(RADIX,2u).pow(p);return *this;}
+	UMultiInt& operator^=(const UMultiInt&b){return *this=bit_helper(*this,b,[](u32 a,u32 b)->u32{return a^b;});}
+	UMultiInt operator^(const UMultiInt&b)const{return bit_helper(*this,b,[](u32 a,u32 b)->u32{return a^b;});}
+	UMultiInt& operator|=(const UMultiInt&b){return *this=bit_helper(*this,b,[](u32 a,u32 b)->u32{return a|b;});}
+	UMultiInt operator|(const UMultiInt&b)const{return bit_helper(*this,b,[](u32 a,u32 b)->u32{return a|b;});}
+	UMultiInt& operator&=(const UMultiInt&b){return *this=bit_helper(*this,b,[](u32 a,u32 b)->u32{return a&b;});}
+	UMultiInt operator&(const UMultiInt&b)const{return bit_helper(*this,b,[](u32 a,u32 b)->u32{return a&b;});}
 	//--base_Transform--
 	std::pair<UMultiInt,UMultiInt> _to(u32 ra,int l,int r)const{
 		if(l==r) return {UMultiInt(ra,num[l]),UMultiInt(ra,BASE)};
@@ -693,27 +705,8 @@ public:
 		pr*=pl;
 		return {lo+=(hi*=pl),pr};
 	}
-	std::pair<UMultiInt,UMultiInt> _from(const UMultiInt&a,int l,int r)const{
-		if(l==r) return {UMultiInt(RADIX,a.num[l]),UMultiInt(RADIX,a.BASE)};
-		int mid=(l+r)>>1;
-		auto [lo,pl]=_from(a,l,mid);
-		auto [hi,pr]=_from(a,mid+1,r);
-		pr*=pl;
-		return {lo+=(hi*=pl),pr};
-	}
 	UMultiInt To_base(u32 r)const{return _to(r,0,len-1).first;}
-	UMultiInt From_base(const UMultiInt&a)const{return _from(a,0,a.len-1).first;}
-	//--bit--
-	UMultiInt operator<<(u32 p)const{UMultiInt res(*this);res<<=p;return res;}
-	UMultiInt& operator<<=(u32 p){*this*=UMultiInt(RADIX,2u).pow(p);return *this;}
-    UMultiInt operator>>(u32 p)const{UMultiInt res(*this);res>>=p;return res;}
-	UMultiInt& operator>>=(u32 p){*this/=UMultiInt(RADIX,2u).pow(p);return *this;}
-	UMultiInt& operator^=(const UMultiInt&b){return *this=bit_helper(*this,b,[](bool a,bool b)->bool{return a^b;});}
-	UMultiInt operator^(const UMultiInt&b)const{return bit_helper(*this,b,[](bool a,bool b)->bool{return a^b;});}
-	UMultiInt& operator|=(const UMultiInt&b){return *this=bit_helper(*this,b,[](bool a,bool b)->bool{return a|b;});}
-	UMultiInt operator|(const UMultiInt&b)const{return bit_helper(*this,b,[](bool a,bool b)->bool{return a|b;});}
-	UMultiInt& operator&=(const UMultiInt&b){return *this=bit_helper(*this,b,[](bool a,bool b)->bool{return a&b;});}
-	UMultiInt operator&(const UMultiInt&b)const{return bit_helper(*this,b,[](bool a,bool b)->bool{return a&b;});}
+	UMultiInt From_base(const UMultiInt&a)const{return a.To_base(RADIX);}
 };
 
 namespace Operation{
@@ -751,27 +744,11 @@ namespace Operation{
 		}
 		c<<=p;return c;
 	}
+	UMultiInt Lcm(const UMultiInt&a,const UMultiInt&b){return a*b/Gcd(a,b);}
 	UMultiInt Root(const UMultiInt&a,u32 p){return a.root(p);}
 	UMultiInt Sqrt(const UMultiInt&a){return a.sqrt();}
 }
 
-using namespace std;
-using namespace Operation;
-void Solve(){
-	UMultiInt a(10),b(10);cin>>a>>b;
-	cout<<(a^b)<<'\n';
-}
-int main(){
-	// ios::sync_with_stdio(0);
-	// cin.tie(0);
-	// cout.tie(0);
-	// freopen("in.in","r",stdin);
-	// freopen("ceshi.out","w",stdout);
-	int T=1;//cin>>T;
-	while(T--) Solve();
-	system("pause");
-	return 0;
-}
 /*
 input:
 100001100010010011100100101100101010101010101010000101110010011
@@ -779,6 +756,6 @@ output:1000011000010111011101111101111111111
 working:+ - * Simple_Mod
 un: Inv / % 
 Death Reason: 
-	1.UMultiInt(&) operator*=
-	2.UMultiInt(const UMultiInt&b)...[fake:Max(b.Max),real:Max(b.len)]
+1.UMultiInt(&) operator*=
+2.UMultiInt(const UMultiInt&b)...[fake:Max(b.Max),real:Max(b.len)]
 */
